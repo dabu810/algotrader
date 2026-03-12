@@ -44,12 +44,187 @@ banner() {
   echo -e "${RESET}"
 }
 
+# ── Docker installation ────────────────────────────────────────────────────────
+install_docker() {
+  info "Docker not found. Attempting automatic installation..."
+
+  OS="$(uname -s)"
+  ARCH="$(uname -m)"
+
+  case "$OS" in
+    Linux)
+      # Detect distro
+      if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        DISTRO="${ID:-unknown}"
+      else
+        DISTRO="unknown"
+      fi
+
+      info "Detected Linux distro: $DISTRO"
+
+      case "$DISTRO" in
+        ubuntu|debian|linuxmint|pop)
+          info "Installing Docker via apt (Ubuntu/Debian)..."
+          sudo apt-get update -qq
+          sudo apt-get install -y ca-certificates curl gnupg lsb-release
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/${DISTRO}/gpg \
+            | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          sudo chmod a+r /etc/apt/keyrings/docker.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+            https://download.docker.com/linux/${DISTRO} $(lsb_release -cs) stable" \
+            | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          sudo usermod -aG docker "$USER" || true
+          ;;
+        centos|rhel|rocky|almalinux)
+          info "Installing Docker via dnf (RHEL/CentOS)..."
+          sudo dnf -y install dnf-plugins-core
+          sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+          sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          sudo systemctl enable --now docker
+          sudo usermod -aG docker "$USER" || true
+          ;;
+        fedora)
+          info "Installing Docker via dnf (Fedora)..."
+          sudo dnf -y install dnf-plugins-core
+          sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+          sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          sudo systemctl enable --now docker
+          sudo usermod -aG docker "$USER" || true
+          ;;
+        amzn)
+          info "Installing Docker (Amazon Linux)..."
+          sudo yum update -y
+          sudo yum install -y docker
+          sudo systemctl enable --now docker
+          sudo usermod -aG docker "$USER" || true
+          # Install Compose V2 plugin manually on Amazon Linux
+          COMPOSE_VER="v2.27.0"
+          sudo mkdir -p /usr/local/lib/docker/cli-plugins
+          sudo curl -SL "https://github.com/docker/compose/releases/download/${COMPOSE_VER}/docker-compose-linux-$(uname -m)" \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          ;;
+        *)
+          info "Unknown distro '$DISTRO'. Using Docker convenience install script..."
+          curl -fsSL https://get.docker.com | sudo sh
+          sudo usermod -aG docker "$USER" || true
+          ;;
+      esac
+      ;;
+
+    Darwin)
+      # macOS — check for Homebrew first, then guide user to Docker Desktop
+      if command -v brew >/dev/null 2>&1; then
+        info "Installing Docker Desktop via Homebrew..."
+        brew install --cask docker
+        info "Launching Docker Desktop..."
+        open -a Docker || true
+        info "Waiting for Docker daemon to start (up to 60s)..."
+        for i in $(seq 1 12); do
+          docker info >/dev/null 2>&1 && break || sleep 5
+        done
+      else
+        warn "Homebrew not found."
+        echo ""
+        echo "  Please install Docker Desktop for macOS manually:"
+        echo "  → https://docs.docker.com/desktop/install/mac-install/"
+        echo ""
+        echo "  Or install Homebrew first:"
+        echo "  → /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+        die "Cannot auto-install Docker on macOS without Homebrew."
+      fi
+      ;;
+
+    *)
+      warn "Unsupported OS: $OS"
+      echo ""
+      echo "  Please install Docker manually: https://docs.docker.com/get-docker/"
+      die "Cannot auto-install Docker on $OS."
+      ;;
+  esac
+
+  # Final verification
+  if command -v docker >/dev/null 2>&1; then
+    success "Docker installed: $(docker --version)"
+  else
+    die "Docker installation failed. Please install manually: https://docs.docker.com/get-docker/"
+  fi
+}
+
+install_compose() {
+  info "Installing Docker Compose plugin..."
+  COMPOSE_VER="v2.27.0"
+  OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  ARCH="$(uname -m)"
+  [ "$ARCH" = "x86_64" ] && ARCH="x86_64"
+  [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ] && ARCH="aarch64"
+
+  sudo mkdir -p /usr/local/lib/docker/cli-plugins
+  sudo curl -SL \
+    "https://github.com/docker/compose/releases/download/${COMPOSE_VER}/docker-compose-${OS}-${ARCH}" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  success "Docker Compose installed: $(docker compose version)"
+}
+
 # ── Preflight checks ───────────────────────────────────────────────────────────
 check_deps() {
-  command -v docker  >/dev/null 2>&1 || die "Docker is not installed. https://docs.docker.com/get-docker/"
-  docker compose version >/dev/null 2>&1 || \
-    docker-compose version >/dev/null 2>&1 || \
-    die "Docker Compose is not installed."
+  # ── Docker ──
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "Docker is not installed."
+    read -r -p "  Install Docker automatically? [y/N] " answer
+    case "$answer" in
+      [yY][eE][sS]|[yY])
+        install_docker
+        ;;
+      *)
+        die "Docker is required. Install it from: https://docs.docker.com/get-docker/"
+        ;;
+    esac
+  else
+    success "Docker: $(docker --version)"
+  fi
+
+  # ── Docker Compose ──
+  if docker compose version >/dev/null 2>&1; then
+    success "Docker Compose: $(docker compose version)"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    success "Docker Compose (legacy): $(docker-compose --version)"
+  else
+    warn "Docker Compose plugin not found."
+    read -r -p "  Install Docker Compose plugin automatically? [y/N] " answer
+    case "$answer" in
+      [yY][eE][sS]|[yY])
+        install_compose
+        ;;
+      *)
+        die "Docker Compose is required. See: https://docs.docker.com/compose/install/"
+        ;;
+    esac
+  fi
+
+  # ── Docker daemon running? ──
+  if ! docker info >/dev/null 2>&1; then
+    warn "Docker daemon is not running."
+    OS="$(uname -s)"
+    if [ "$OS" = "Darwin" ]; then
+      info "Starting Docker Desktop..."
+      open -a Docker || true
+      info "Waiting for Docker daemon (up to 60s)..."
+      for i in $(seq 1 12); do
+        docker info >/dev/null 2>&1 && break || sleep 5
+      done
+    elif [ "$OS" = "Linux" ]; then
+      info "Starting Docker service..."
+      sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
+      sleep 3
+    fi
+    docker info >/dev/null 2>&1 || die "Docker daemon still not running. Please start Docker and retry."
+  fi
 }
 
 check_env() {
