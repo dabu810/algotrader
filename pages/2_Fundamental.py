@@ -138,6 +138,12 @@ if run:
                 st.error(f"Configuration error: {e}")
                 st.stop()
             except Exception as e:
+                msg = str(e)
+                if "401" in msg or "authentication_error" in msg or "invalid x-api-key" in msg or "invalid_api_key" in msg:
+                    provider_key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
+                                    "gemini": "GOOGLE_API_KEY", "mistral": "MISTRAL_API_KEY"}.get(provider, "API key")
+                    st.error(f"Invalid API key for **{provider}**. Check `{provider_key}` in your `.env` file.")
+                    st.stop()
                 results[symbol] = f"⚠️ Error analysing {symbol}: {e}"
 
         progress_ph.empty()

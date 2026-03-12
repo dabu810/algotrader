@@ -519,10 +519,16 @@ def get_provider(
         "mistral":   "MISTRAL_API_KEY",
     }[name]
 
-    api_key = os.environ.get(key_env, "")
+    api_key = os.environ.get(key_env, "").strip().strip('"').strip("'")
     if not api_key:
         raise EnvironmentError(
-            f"API key not set. Add {key_env} to your .env file."
+            f"API key not set. Add {key_env}=<your-key> to your .env file."
+        )
+    # Catch placeholder values that weren't replaced
+    if api_key.startswith("<") or api_key in ("your-key", "sk-...", "..."):
+        raise EnvironmentError(
+            f"{key_env} contains a placeholder value. "
+            f"Replace it with your real API key in .env."
         )
 
     cls_map: dict[str, type[BaseProvider]] = {
