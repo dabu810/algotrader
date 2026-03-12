@@ -210,20 +210,91 @@ check_deps() {
   # ── Docker daemon running? ──
   if ! docker info >/dev/null 2>&1; then
     warn "Docker daemon is not running."
-    OS="$(uname -s)"
-    if [ "$OS" = "Darwin" ]; then
-      info "Starting Docker Desktop..."
-      open -a Docker || true
-      info "Waiting for Docker daemon (up to 60s)..."
-      for i in $(seq 1 12); do
-        docker info >/dev/null 2>&1 && break || sleep 5
+    _wait_for_daemon() {
+      local max_wait="${1:-120}"
+      local interval=5
+      local elapsed=0
+      while [ "$elapsed" -lt "$max_wait" ]; do
+        docker info >/dev/null 2>&1 && return 0
+        printf "  Waiting for Docker daemon... %ds/%ds\r" "$elapsed" "$max_wait"
+        sleep "$interval"
+        elapsed=$(( elapsed + interval ))
       done
-    elif [ "$OS" = "Linux" ]; then
-      info "Starting Docker service..."
-      sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
-      sleep 3
-    fi
-    docker info >/dev/null 2>&1 || die "Docker daemon still not running. Please start Docker and retry."
+      echo ""
+      return 1
+    }
+
+    OS="$(uname -s)"
+    case "$OS" in
+      Darwin)
+        # Try Docker Desktop first
+        if [ -d "/Applications/Docker.app" ]; then
+          info "Starting Docker Desktop..."
+          open -a Docker
+          info "Waiting up to 120s for Docker daemon..."
+          if _wait_for_daemon 120; then
+            echo ""
+            success "Docker daemon is ready."
+          else
+            echo ""
+            # Second attempt: kill and reopen
+            warn "Daemon still not ready — restarting Docker Desktop..."
+            osascript -e 'quit app "Docker"' 2>/dev/null || killall Docker 2>/dev/null || true
+            sleep 3
+            open -a Docker
+            info "Waiting another 90s..."
+            if _wait_for_daemon 90; then
+              echo ""
+              success "Docker daemon is ready."
+            else
+              echo ""
+              die "Docker daemon did not start in time.
+  Try manually:
+    1. Open Docker Desktop from Applications
+    2. Wait for the whale icon to stop animating
+    3. Re-run: ./deploy.sh"
+            fi
+          fi
+        else
+          die "Docker Desktop is not installed in /Applications.
+  Install it from: https://docs.docker.com/desktop/install/mac-install/
+  Or via Homebrew:  brew install --cask docker"
+        fi
+        ;;
+
+      Linux)
+        info "Starting Docker service..."
+        # Try systemd first, then init.d, then dockerd directly
+        if command -v systemctl >/dev/null 2>&1; then
+          sudo systemctl start docker 2>/dev/null && info "systemctl: docker started" || true
+        fi
+        if ! docker info >/dev/null 2>&1; then
+          sudo service docker start 2>/dev/null && info "service: docker started" || true
+        fi
+        if ! docker info >/dev/null 2>&1; then
+          warn "Starting dockerd in background as fallback..."
+          sudo dockerd > /tmp/dockerd.log 2>&1 &
+        fi
+        info "Waiting up to 60s for Docker daemon..."
+        if _wait_for_daemon 60; then
+          echo ""
+          success "Docker daemon is ready."
+        else
+          echo ""
+          die "Docker daemon did not start. Diagnostics:
+  Check logs:     sudo journalctl -u docker --no-pager -n 30
+  Check socket:   ls -la /var/run/docker.sock
+  Manual start:   sudo systemctl start docker
+  Then retry:     ./deploy.sh"
+        fi
+        ;;
+
+      *)
+        die "Cannot auto-start Docker on $OS. Please start Docker manually and retry."
+        ;;
+    esac
+  else
+    success "Docker daemon: running"
   fi
 }
 
