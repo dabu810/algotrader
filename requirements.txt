@@ -3,6 +3,8 @@ python-dotenv>=1.0.0
 rich>=13.0.0
 twilio>=9.0.0
 flask>=3.0.0
+streamlit>=1.36.0
+gunicorn>=22.0.0
 
 # Multi-model providers (install whichever you use)
 openai>=1.0.0

@@ -99,19 +99,28 @@ cmd_build() {
 }
 
 cmd_up() {
-  info "Starting WhatsApp webhook server..."
-  $COMPOSE up -d whatsapp-webhook
-  sleep 2
-  $COMPOSE ps whatsapp-webhook
+  info "Starting UI dashboard + WhatsApp webhook server..."
+  $COMPOSE up -d ui whatsapp-webhook
+  sleep 3
+  $COMPOSE ps ui whatsapp-webhook
   echo ""
-  success "Webhook server is running."
+  success "Services are running."
   echo ""
-  echo -e "  ${BOLD}Next steps:${RESET}"
+  echo -e "  ${BOLD}Dashboard:${RESET}  http://localhost:${UI_PORT:-8501}"
+  echo ""
+  echo -e "  ${BOLD}WhatsApp setup:${RESET}"
   echo "  1. Run:  ngrok http 5001"
   echo "  2. Copy the HTTPS URL"
   echo "  3. Twilio Console → Messaging → Sandbox settings"
   echo "     → 'When a message comes in' → paste URL + /webhook"
   echo "  4. Send a stock name via WhatsApp to trigger analysis"
+}
+
+cmd_ui() {
+  info "Starting Streamlit dashboard only..."
+  $COMPOSE up -d ui
+  sleep 3
+  success "Dashboard running at http://localhost:${UI_PORT:-8501}"
 }
 
 cmd_down() {
@@ -121,17 +130,20 @@ cmd_down() {
 }
 
 cmd_restart() {
-  info "Restarting webhook server..."
-  $COMPOSE restart whatsapp-webhook
+  info "Restarting services..."
+  $COMPOSE restart ui whatsapp-webhook
   success "Restarted."
 }
 
 cmd_logs() {
   local follow_flag=""
+  local svc="ui whatsapp-webhook"
   for arg in "$@"; do
     [ "$arg" = "--follow" ] || [ "$arg" = "-f" ] && follow_flag="--follow"
+    [ "$arg" = "ui" ]       && svc="ui"
+    [ "$arg" = "webhook" ]  && svc="whatsapp-webhook"
   done
-  $COMPOSE logs $follow_flag whatsapp-webhook
+  $COMPOSE logs $follow_flag $svc
 }
 
 cmd_status() {
@@ -196,10 +208,11 @@ cmd_help() {
   banner
   echo -e "${BOLD}Infrastructure commands:${RESET}"
   echo "  build              Build all Docker images"
-  echo "  up                 Start the WhatsApp webhook server (background)"
+  echo "  up                 Start UI dashboard + WhatsApp webhook (background)"
+  echo "  ui                 Start UI dashboard only"
   echo "  down               Stop all services"
-  echo "  restart            Restart the webhook server"
-  echo "  logs [-f]          Show webhook logs  (-f to follow)"
+  echo "  restart            Restart all services"
+  echo "  logs [-f] [ui|webhook]   Show logs  (-f to follow)"
   echo "  status             Show container and image status"
   echo ""
   echo -e "${BOLD}Agent commands (run once, exit when done):${RESET}"
@@ -210,8 +223,9 @@ cmd_help() {
   echo -e "${BOLD}Quick start:${RESET}"
   echo "  1.  cp .env.example .env && vim .env   # add API keys"
   echo "  2.  ./deploy.sh build"
-  echo "  3.  ./deploy.sh up                     # starts WhatsApp webhook"
-  echo "  4.  ./deploy.sh tv NIFTY               # run TradingView analysis"
+  echo "  3.  ./deploy.sh up                     # starts UI + webhook"
+  echo "       → open http://localhost:8501"
+  echo "  4.  ./deploy.sh tv NIFTY               # CLI: TradingView analysis"
   echo "  5.  ./deploy.sh fo --capital 500000 --instrument NIFTY"
   echo "  6.  ./deploy.sh fund RELIANCE"
 }
@@ -228,6 +242,7 @@ main() {
   case "$cmd" in
     build)                cmd_build "$@" ;;
     up|start)             cmd_up    "$@" ;;
+    ui|dashboard)         cmd_ui    "$@" ;;
     down|stop)            cmd_down  "$@" ;;
     restart)              cmd_restart "$@" ;;
     logs)                 cmd_logs  "$@" ;;
