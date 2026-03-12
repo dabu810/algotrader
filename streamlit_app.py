@@ -93,31 +93,14 @@ st.markdown("""
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("## 📈 Claude Trading Agents")
 st.markdown(
-    "AI-powered market analysis for Indian equities and derivatives. "
+    "AI-powered market analysis for Indian equities. "
     "Powered by [Anthropic Claude](https://anthropic.com) with multi-model support."
 )
 st.divider()
 
 
 # ── Agent Cards ───────────────────────────────────────────────────────────────
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown("""
-    <div class="agent-card">
-        <h3>📊 F&amp;O Signal Agent</h3>
-        <span class="badge">NSE</span>
-        <span class="badge">Options</span>
-        <span class="badge">Intraday</span>
-        <p>
-            Generates actionable intraday F&amp;O signals for NIFTY, BANKNIFTY &amp; FINNIFTY.
-            Analyses open interest, PCR, India VIX, VWAP, RSI, and session timing to produce
-            complete trade setups with entry, stop-loss, and targets.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("Open F&O Agent →", key="goto_fo"):
-        st.switch_page("pages/1_FO_Signal.py")
+col2, col3 = st.columns(2)
 
 with col2:
     st.markdown("""
