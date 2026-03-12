@@ -171,7 +171,7 @@ with st.expander("⚙️ Setup & Configuration", expanded=False):
 st.markdown("""
 <div class="disclaimer">
 ⚠️ <strong>Disclaimer:</strong> All analysis is AI-generated and for <strong>educational and informational purposes only</strong>.
-This is not SEBI-registered investment advice. F&O trading involves substantial risk of loss.
-Always conduct your own research and consult a qualified financial advisor before trading.
+This is not SEBI-registered investment advice.
+Always conduct your own research and consult a qualified financial advisor before making any investment decisions.
 </div>
 """, unsafe_allow_html=True)
