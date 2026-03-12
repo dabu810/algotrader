@@ -25,6 +25,12 @@
 
 set -euo pipefail
 
+# ── Ensure Homebrew and its binaries are on PATH (macOS) ──────────────────────
+for _brew_prefix in /opt/homebrew /usr/local; do
+  [ -d "$_brew_prefix/bin" ] && export PATH="$_brew_prefix/bin:$PATH"
+done
+unset _brew_prefix
+
 # ── Colour helpers ─────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
@@ -227,38 +233,71 @@ check_deps() {
     OS="$(uname -s)"
     case "$OS" in
       Darwin)
-        # Try Docker Desktop first
-        if [ -d "/Applications/Docker.app" ]; then
+        # Priority: 1) Colima  2) Docker Desktop
+        _BREW="/opt/homebrew/bin/brew"
+        _COLIMA="$(command -v colima 2>/dev/null || echo /opt/homebrew/bin/colima)"
+
+        if command -v colima >/dev/null 2>&1 || [ -x /opt/homebrew/bin/colima ]; then
+          info "Starting Docker via Colima..."
+          "$_COLIMA" start 2>&1 | grep -v "^$" || true
+          info "Waiting up to 60s for Docker daemon..."
+          if _wait_for_daemon 60; then
+            echo ""
+            success "Docker daemon is ready (Colima)."
+          else
+            echo ""
+            warn "Colima start timed out — retrying with fresh VM..."
+            "$_COLIMA" stop 2>/dev/null || true
+            "$_COLIMA" start --cpu 2 --memory 4 2>&1 | grep -v "^$" || true
+            _wait_for_daemon 90 && echo "" && success "Docker daemon is ready." || \
+              die "Colima failed to start. Run manually: colima start\nThen retry: ./deploy.sh"
+          fi
+
+        elif [ -d "/Applications/Docker.app" ]; then
           info "Starting Docker Desktop..."
           open -a Docker
           info "Waiting up to 120s for Docker daemon..."
           if _wait_for_daemon 120; then
             echo ""
-            success "Docker daemon is ready."
+            success "Docker daemon is ready (Docker Desktop)."
           else
             echo ""
-            # Second attempt: kill and reopen
             warn "Daemon still not ready — restarting Docker Desktop..."
             osascript -e 'quit app "Docker"' 2>/dev/null || killall Docker 2>/dev/null || true
             sleep 3
             open -a Docker
             info "Waiting another 90s..."
-            if _wait_for_daemon 90; then
-              echo ""
-              success "Docker daemon is ready."
-            else
-              echo ""
-              die "Docker daemon did not start in time.
-  Try manually:
-    1. Open Docker Desktop from Applications
-    2. Wait for the whale icon to stop animating
-    3. Re-run: ./deploy.sh"
-            fi
+            _wait_for_daemon 90 && echo "" && success "Docker daemon is ready." || \
+              die "Docker Desktop did not start in time.
+  Try: open Docker Desktop manually, wait for the whale to stop animating, then re-run ./deploy.sh"
           fi
+
+        elif [ -x "$_BREW" ]; then
+          warn "No Docker runtime found. Installing Colima via Homebrew..."
+          "$_BREW" install colima docker docker-compose
+          # Register compose plugin
+          mkdir -p ~/.docker
+          python3 -c "
+import json, os
+p = os.path.expanduser('~/.docker/config.json')
+c = {}
+if os.path.exists(p):
+    try: c = json.load(open(p))
+    except: pass
+c['cliPluginsExtraDirs'] = ['/opt/homebrew/lib/docker/cli-plugins']
+json.dump(c, open(p,'w'), indent=2)
+" 2>/dev/null || true
+          /opt/homebrew/bin/colima start --cpu 2 --memory 4
+          _wait_for_daemon 90 && echo "" && success "Docker daemon is ready." || \
+            die "Colima failed after install. Try: colima start && ./deploy.sh"
+
         else
-          die "Docker Desktop is not installed in /Applications.
-  Install it from: https://docs.docker.com/desktop/install/mac-install/
-  Or via Homebrew:  brew install --cask docker"
+          die "No Docker runtime found and Homebrew is not available.
+  Option 1 (recommended): Install Colima
+    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"
+    brew install colima docker docker-compose && colima start
+  Option 2: Install Docker Desktop
+    https://docs.docker.com/desktop/install/mac-install/"
         fi
         ;;
 
