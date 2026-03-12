@@ -1,0 +1,63 @@
+services:
+
+  # ── Always-on: WhatsApp Webhook Server ───────────────────────────────────────
+  # Listens for incoming WhatsApp messages and triggers fundamental analysis.
+  # Expose port 5001 and point your Twilio sandbox webhook to:
+  #   https://<your-ngrok-url>/webhook
+  whatsapp-webhook:
+    image: trading-agents/whatsapp-webhook
+    build:
+      context: .
+      dockerfile: docker/whatsapp-webhook/Dockerfile
+    ports:
+      - "${WEBHOOK_PORT:-5001}:5001"
+    env_file: .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── On-demand CLI agents ─────────────────────────────────────────────────────
+  # These are NOT started by default. Run them with:
+  #   docker compose run --rm fo-signal --capital 500000 --instrument NIFTY
+  #   docker compose run --rm fundamental RELIANCE
+  #   docker compose run --rm tradingview NIFTY --timeframe 15m
+  #
+  # Or use deploy.sh:
+  #   ./deploy.sh fo --capital 500000 --instrument NIFTY
+  #   ./deploy.sh fundamental RELIANCE
+  #   ./deploy.sh tradingview NIFTY --timeframe 1h --provider gemini
+
+  fo-signal:
+    image: trading-agents/fo-signal
+    build:
+      context: .
+      dockerfile: docker/fo-signal/Dockerfile
+    env_file: .env
+    profiles: ["tools"]
+    stdin_open: true
+    tty: true
+
+  fundamental:
+    image: trading-agents/fundamental
+    build:
+      context: .
+      dockerfile: docker/fundamental/Dockerfile
+    env_file: .env
+    profiles: ["tools"]
+    stdin_open: true
+    tty: true
+
+  tradingview:
+    image: trading-agents/tradingview
+    build:
+      context: .
+      dockerfile: docker/tradingview/Dockerfile
+    env_file: .env
+    profiles: ["tools"]
+    stdin_open: true
+    tty: true

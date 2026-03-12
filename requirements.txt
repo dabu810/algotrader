@@ -12,3 +12,8 @@ mistralai>=1.0.0
 # Web search/fetch for non-Anthropic providers
 duckduckgo-search>=6.0.0
 httpx>=0.27.0
+
+# TradingView Technical Analysis Agent
+mcp>=1.0.0                    # MCP Python SDK (client for MCP servers)
+mcp-tradingview-server>=0.1.0 # TradingView MCP server (bidouilles)
+tradingview-scraper>=0.3.0    # Fallback if MCP server is unavailable
