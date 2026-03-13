@@ -9,8 +9,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir setuptools \
-    && pip install --no-cache-dir \
+RUN pip install --no-cache-dir \
         anthropic \
         python-dotenv \
         rich \
@@ -23,11 +22,7 @@ RUN pip install --no-cache-dir setuptools \
         flask \
         streamlit \
         tradingview_ta \
-        yfinance \
-        mcp \
-    && (pip install --no-cache-dir mcp-tradingview-server 2>/dev/null \
-        || pip install --no-cache-dir "git+https://github.com/bidouilles/mcp-tradingview-server.git" 2>/dev/null \
-        || echo "[INFO] mcp-tradingview-server unavailable — tradingview_ta fallback will be used")
+        yfinance
 
 # Copy all agent source + UI files
 COPY *.py ./

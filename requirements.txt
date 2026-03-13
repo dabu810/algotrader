@@ -16,7 +16,7 @@ duckduckgo-search>=6.0.0
 httpx>=0.27.0
 
 # TradingView Technical Analysis Agent
-mcp>=1.0.0                    # MCP Python SDK (client for MCP servers)
-# mcp-tradingview-server: install via deploy.sh (not on PyPI — installed from GitHub)
-tradingview_ta>=0.3.10        # Reliable TradingView scanner API (primary fallback)
+# mcp and mcp-tradingview-server are optional — only needed if the MCP binary is installed
+# Install manually: pip install mcp && pip install git+https://github.com/bidouilles/mcp-tradingview-server.git
+tradingview_ta>=0.3.10        # TradingView scanner API (primary data source)
 yfinance>=0.2.40              # Historical OHLCV data fallback
