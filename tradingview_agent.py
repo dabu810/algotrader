@@ -533,9 +533,11 @@ This returns a scored directional bias with confidence percentage.
 ```
 
 ## Rules
-- Only use values returned by tools — never fabricate indicator numbers.
+- Always call the tools to fetch real data — never fabricate indicator numbers or price levels.
+- If a tool returns an error, note it and continue with the data that was successfully retrieved.
+- Work with whatever data is available; partial data is better than no analysis.
 - When signals conflict, state which takes priority and why.
-- Specify actual price levels, not vague descriptions.
+- Specify actual price levels returned by tools, not vague descriptions.
 - Distinguish intraday vs positional outlook where relevant.
 - Do not provide buy/sell/investment recommendations.
 """

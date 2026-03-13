@@ -21,9 +21,9 @@ RUN pip install --no-cache-dir \
         twilio \
         flask \
         streamlit \
+    && pip install --no-cache-dir tradingview_ta yfinance \
     && pip install --no-cache-dir mcp 2>/dev/null || true \
-    && pip install --no-cache-dir mcp-tradingview-server 2>/dev/null || echo "mcp-tradingview-server not available" \
-    && pip install --no-cache-dir tradingview-scraper 2>/dev/null || echo "tradingview-scraper not available"
+    && pip install --no-cache-dir mcp-tradingview-server 2>/dev/null || echo "mcp-tradingview-server not available"
 
 # Copy all agent source + UI files
 COPY *.py ./
