@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 PROVIDER_DEFAULTS: dict[str, str] = {
     "anthropic": "claude-opus-4-6",
     "openai":    "gpt-4o",
-    "gemini":    "gemini-2.0-flash",
+    "gemini":    "gemini-3-flash-preview",
     "mistral":   "mistral-large-latest",
 }
 
@@ -54,10 +54,10 @@ PROVIDER_MODELS: dict[str, list[str]] = {
         "o1-mini",
     ],
     "gemini": [
-        "gemini-2.5-pro-preview-03-25",
-        "gemini-2.5-flash-preview-04-17",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
         "gemini-2.0-flash",
-        "gemini-2.0-flash-001",
     ],
     "mistral": [
         "mistral-large-latest",
