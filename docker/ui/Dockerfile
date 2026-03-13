@@ -9,7 +9,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir setuptools \
+    && pip install --no-cache-dir \
         anthropic \
         python-dotenv \
         rich \

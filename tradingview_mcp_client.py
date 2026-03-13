@@ -95,27 +95,29 @@ class TradingViewMCPClient:
         })
 
     def is_available(self) -> bool:
-        """Probe the MCP server — result is cached after first call."""
+        """Check if MCP server binary is present — result is cached."""
         if self._available is None:
-            try:
-                res = self._run_async(self._async_call("get_indicators", {
-                    "symbol": "NIFTY", "exchange": "NSE", "timeframe": "1D"
-                }))
-                self._available = "error" not in res
-            except Exception:
-                self._available = False
+            self._available = self._mcp_binary_exists()
         return self._available
 
     # ── Internal routing ──────────────────────────────────────────────────────
 
     def _call(self, tool: str, args: dict) -> dict:
+        # Skip MCP entirely if the server binary isn't installed
+        if not self._mcp_binary_exists():
+            return self._fallback_call(tool, args)
         try:
             return self._run_async(self._async_call(tool, args))
         except Exception as exc:
             if self._fallback:
-                log.warning("MCP unavailable (%s) — using direct fallback", exc)
+                log.debug("MCP unavailable (%s) — using direct fallback", exc)
                 return self._fallback_call(tool, args)
             return {"error": str(exc), "tool": tool}
+
+    def _mcp_binary_exists(self) -> bool:
+        """Check if the MCP server binary is on PATH."""
+        import shutil
+        return shutil.which(self._command) is not None
 
     # ── Async MCP machinery ───────────────────────────────────────────────────
 
