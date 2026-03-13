@@ -40,6 +40,33 @@ PROVIDER_DEFAULTS: dict[str, str] = {
     "mistral":   "mistral-large-latest",
 }
 
+PROVIDER_MODELS: dict[str, list[str]] = {
+    "anthropic": [
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+    ],
+    "openai": [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4-turbo",
+        "o1",
+        "o1-mini",
+    ],
+    "gemini": [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+    ],
+    "mistral": [
+        "mistral-large-latest",
+        "mistral-medium-latest",
+        "mistral-small-latest",
+        "open-mixtral-8x22b",
+    ],
+}
+
 SUPPORTED_PROVIDERS = list(PROVIDER_DEFAULTS.keys())
 
 # Server-side tool names used by Anthropic

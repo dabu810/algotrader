@@ -8,7 +8,7 @@ import streamlit as st
 from dotenv import load_dotenv
 load_dotenv()
 
-from model_provider import SUPPORTED_PROVIDERS, provider_info, ToolCall
+from model_provider import SUPPORTED_PROVIDERS, PROVIDER_MODELS, provider_info, ToolCall
 
 st.set_page_config(page_title="TradingView TA Agent", page_icon="📡", layout="wide")
 
@@ -49,7 +49,8 @@ with st.sidebar:
         options=SUPPORTED_PROVIDERS,
         index=SUPPORTED_PROVIDERS.index(os.environ.get("LLM_PROVIDER", "anthropic")),
     )
-    model_override = st.text_input("Model (optional)", placeholder="e.g. gemini-2.0-flash")
+    available_models = PROVIDER_MODELS[provider]
+    model_override = st.selectbox("Model", options=available_models, index=0)
     st.divider()
     st.markdown("**TradingView MCP Server**")
     mcp_cmd = st.text_input(
@@ -109,10 +110,7 @@ if run:
         st.stop()
 
     os.environ["LLM_PROVIDER"] = provider
-    if model_override:
-        os.environ["LLM_MODEL"] = model_override
-    elif "LLM_MODEL" in os.environ:
-        del os.environ["LLM_MODEL"]
+    os.environ["LLM_MODEL"] = model_override
 
     TOOL_LABELS = {
         "get_indicators":               "📊 Fetching indicators",
@@ -143,7 +141,7 @@ if run:
                 timeframe=timeframe,
                 exchange=exchange,
                 provider_name=provider,
-                model=model_override or None,
+                model=model_override,
                 mcp_server=mcp_cmd,
                 verbose=False,
             )

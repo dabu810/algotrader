@@ -8,7 +8,7 @@ import streamlit as st
 from dotenv import load_dotenv
 load_dotenv()
 
-from model_provider import SUPPORTED_PROVIDERS, provider_info
+from model_provider import SUPPORTED_PROVIDERS, PROVIDER_MODELS, provider_info
 
 st.set_page_config(page_title="Fundamental Analysis", page_icon="🔍", layout="wide")
 
@@ -43,7 +43,8 @@ with st.sidebar:
         options=SUPPORTED_PROVIDERS,
         index=SUPPORTED_PROVIDERS.index(os.environ.get("LLM_PROVIDER", "anthropic")),
     )
-    model_override = st.text_input("Model (optional)", placeholder="e.g. claude-opus-4-6")
+    available_models = PROVIDER_MODELS[provider]
+    model_override = st.selectbox("Model", options=available_models, index=0)
     st.divider()
     st.caption(f"Active: `{provider_info()}`")
     st.divider()
@@ -90,10 +91,7 @@ if run:
 
     # Set provider env var so fundamental_agent picks it up
     os.environ["LLM_PROVIDER"] = provider
-    if model_override:
-        os.environ["LLM_MODEL"] = model_override
-    elif "LLM_MODEL" in os.environ:
-        del os.environ["LLM_MODEL"]
+    os.environ["LLM_MODEL"] = model_override
 
     results: dict[str, str] = {}
 
