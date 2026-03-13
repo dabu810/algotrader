@@ -140,7 +140,9 @@ if run:
                 if "401" in msg or "authentication_error" in msg or "invalid x-api-key" in msg or "invalid_api_key" in msg:
                     provider_key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
                                     "gemini": "GOOGLE_API_KEY", "mistral": "MISTRAL_API_KEY"}.get(provider, "API key")
-                    st.error(f"Invalid API key for **{provider}**. Check `{provider_key}` in your `.env` file.")
+                    progress_ph.empty()
+                    st.error(f"Invalid API key for **{provider}**. Open your `.env` file and set a valid `{provider_key}`.")
+                    st.info("Get your Anthropic API key at https://console.anthropic.com → API Keys")
                     st.stop()
                 results[symbol] = f"⚠️ Error analysing {symbol}: {e}"
 
