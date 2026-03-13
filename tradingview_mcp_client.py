@@ -251,8 +251,27 @@ _YF_PERIOD_MAP = {
 }
 
 
+_YF_INDEX_MAP = {
+    # NSE indices
+    "NIFTY":       "^NSEI",
+    "NIFTY50":     "^NSEI",
+    "NIFTY 50":    "^NSEI",
+    "BANKNIFTY":   "^NSEBANK",
+    "NIFTYBANK":   "^NSEBANK",
+    "FINNIFTY":    "^CNXFIN",
+    "MIDCPNIFTY":  "^CNXMIDCAP",
+    "NIFTYMIDCAP": "^CNXMIDCAP",
+    # BSE indices
+    "SENSEX":      "^BSESN",
+}
+
+
 def _yf_ticker(symbol: str, exchange: str) -> str:
     """Convert NSE/BSE symbol to yfinance ticker format."""
+    # Check index map first (exchange-agnostic)
+    upper = symbol.upper().replace(" ", "")
+    if upper in _YF_INDEX_MAP:
+        return _YF_INDEX_MAP[upper]
     ex = exchange.upper()
     if ex == "NSE":
         return f"{symbol}.NS"
