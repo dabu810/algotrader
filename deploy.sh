@@ -161,6 +161,21 @@ install_docker() {
   fi
 }
 
+install_mcp_server() {
+  info "Installing TradingView MCP server into the Docker image layer..."
+  # The packages are installed at image build time via the Dockerfile.
+  # This function installs them on the HOST for local (non-Docker) runs.
+  if command -v pip3 >/dev/null 2>&1 || command -v pip >/dev/null 2>&1; then
+    PIP=$(command -v pip3 2>/dev/null || command -v pip)
+    info "Installing mcp + mcp-tradingview-server via $PIP..."
+    $PIP install --quiet mcp mcp-tradingview-server 2>&1 | tail -3 && \
+      success "mcp-tradingview-server installed." || \
+      warn "pip install failed — will fall back to tradingview_ta + yfinance."
+  else
+    warn "pip not found — skipping host MCP install. Fallback (tradingview_ta) will be used."
+  fi
+}
+
 install_compose() {
   info "Installing Docker Compose plugin..."
   COMPOSE_VER="v2.27.0"
@@ -376,6 +391,7 @@ COMPOSE=$(compose_cmd)
 
 cmd_build() {
   info "Building all Docker images..."
+  install_mcp_server
   $COMPOSE build --parallel
   success "All images built successfully."
   echo ""
@@ -504,6 +520,7 @@ cmd_help() {
   echo "  fo      [args]     F&O Intraday Signal Agent"
   echo "  fund    [args]     Fundamental Analysis Agent"
   echo "  tv      [args]     TradingView Technical Analysis Agent"
+  echo "  mcp                Install TradingView MCP server on host (for local runs)"
   echo ""
   echo -e "${BOLD}Quick start:${RESET}"
   echo "  1.  cp .env.example .env && vim .env   # add API keys"
@@ -535,6 +552,7 @@ main() {
     fo|fo-signal|fno)     cmd_fo    "$@" ;;
     fund|fundamental|fa)  cmd_fund  "$@" ;;
     tv|tradingview|ta)    cmd_tv    "$@" ;;
+    mcp|install-mcp)      install_mcp_server ;;
     help|--help|-h)       cmd_help  ;;
     *)
       error "Unknown command: $cmd"
