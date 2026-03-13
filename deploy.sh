@@ -162,18 +162,28 @@ install_docker() {
 }
 
 install_mcp_server() {
-  info "Installing TradingView MCP server into the Docker image layer..."
-  # The packages are installed at image build time via the Dockerfile.
-  # This function installs them on the HOST for local (non-Docker) runs.
-  if command -v pip3 >/dev/null 2>&1 || command -v pip >/dev/null 2>&1; then
-    PIP=$(command -v pip3 2>/dev/null || command -v pip)
-    info "Installing mcp + mcp-tradingview-server via $PIP..."
-    $PIP install --quiet mcp mcp-tradingview-server 2>&1 | tail -3 && \
-      success "mcp-tradingview-server installed." || \
-      warn "pip install failed — will fall back to tradingview_ta + yfinance."
-  else
-    warn "pip not found — skipping host MCP install. Fallback (tradingview_ta) will be used."
+  # MCP server is already baked into the Docker image via the Dockerfile.
+  # This installs it on the HOST for local (non-Docker) runs only.
+  info "Checking TradingView MCP server on host..."
+
+  # Resolve pip: try pip3, pip, then python3 -m pip
+  PIP=""
+  for _pip in pip3 pip; do
+    command -v "$_pip" >/dev/null 2>&1 && PIP="$_pip" && break
+  done
+  if [ -z "$PIP" ] && command -v python3 >/dev/null 2>&1; then
+    python3 -m pip --version >/dev/null 2>&1 && PIP="python3 -m pip"
   fi
+
+  if [ -z "$PIP" ]; then
+    info "pip not found on host — MCP server will run inside Docker only (this is fine)."
+    return 0
+  fi
+
+  info "Installing mcp + mcp-tradingview-server on host via $PIP..."
+  $PIP install --quiet mcp mcp-tradingview-server 2>&1 | tail -3 && \
+    success "mcp-tradingview-server installed on host." || \
+    info "Host MCP install skipped — Docker image has it pre-installed."
 }
 
 install_compose() {
