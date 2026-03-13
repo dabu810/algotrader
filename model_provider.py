@@ -186,6 +186,23 @@ def _to_gemini_tools(tools: list[dict]):
     except ImportError:
         raise ImportError("google-genai not installed. Run: pip install google-genai")
 
+    def _build_schema(v: dict) -> "gtypes.Schema":
+        json_type = v.get("type", "string")
+        gemini_type = _json_type_to_gemini(json_type)
+        kwargs: dict = {
+            "type": gemini_type,
+            "description": v.get("description", ""),
+        }
+        if v.get("enum"):
+            kwargs["enum"] = v["enum"]
+        if json_type == "array":
+            item_def = v.get("items", {})
+            kwargs["items"] = gtypes.Schema(
+                type=_json_type_to_gemini(item_def.get("type", "string")),
+                description=item_def.get("description", ""),
+            )
+        return gtypes.Schema(**kwargs)
+
     declarations = []
     for t in tools:
         if t["name"] in _ANTHROPIC_SERVER_TOOLS:
@@ -199,11 +216,7 @@ def _to_gemini_tools(tools: list[dict]):
                 parameters=gtypes.Schema(
                     type=gtypes.Type.OBJECT,
                     properties={
-                        k: gtypes.Schema(
-                            type=_json_type_to_gemini(v.get("type", "string")),
-                            description=v.get("description", ""),
-                            enum=v.get("enum"),
-                        )
+                        k: _build_schema(v)
                         for k, v in params.get("properties", {}).items()
                     },
                     required=params.get("required", []),
