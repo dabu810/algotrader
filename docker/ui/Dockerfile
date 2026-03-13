@@ -5,7 +5,7 @@ LABEL description="Claude Trading Agents — Streamlit Dashboard UI"
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc build-essential \
+    && apt-get install -y --no-install-recommends gcc build-essential git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -21,9 +21,12 @@ RUN pip install --no-cache-dir \
         twilio \
         flask \
         streamlit \
-    && pip install --no-cache-dir tradingview_ta yfinance \
-    && pip install --no-cache-dir mcp 2>/dev/null || true \
-    && pip install --no-cache-dir mcp-tradingview-server 2>/dev/null || echo "mcp-tradingview-server not available"
+        tradingview_ta \
+        yfinance \
+        mcp \
+    && (pip install --no-cache-dir mcp-tradingview-server 2>/dev/null \
+        || pip install --no-cache-dir "git+https://github.com/bidouilles/mcp-tradingview-server.git" 2>/dev/null \
+        || echo "[INFO] mcp-tradingview-server unavailable — tradingview_ta fallback will be used")
 
 # Copy all agent source + UI files
 COPY *.py ./

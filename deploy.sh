@@ -181,9 +181,16 @@ install_mcp_server() {
   fi
 
   info "Installing mcp + mcp-tradingview-server on host via $PIP..."
-  $PIP install --quiet mcp mcp-tradingview-server 2>&1 | tail -3 && \
-    success "mcp-tradingview-server installed on host." || \
-    info "Host MCP install skipped — Docker image has it pre-installed."
+  $PIP install --quiet mcp 2>&1 | tail -2
+
+  # Try PyPI first, then GitHub source
+  if $PIP install --quiet mcp-tradingview-server 2>/dev/null; then
+    success "mcp-tradingview-server installed from PyPI."
+  elif $PIP install --quiet "git+https://github.com/bidouilles/mcp-tradingview-server.git" 2>/dev/null; then
+    success "mcp-tradingview-server installed from GitHub."
+  else
+    info "mcp-tradingview-server not available — tradingview_ta fallback will be used inside Docker."
+  fi
 }
 
 install_compose() {
