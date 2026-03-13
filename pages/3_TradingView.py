@@ -224,7 +224,7 @@ with st.expander("ℹ️ TradingView MCP Server Setup", expanded=False):
     ```
 
     If the MCP server is not installed, the agent automatically falls back to
-    `tradingview-scraper` (`pip install tradingview-scraper`).
+    `tradingview_ta` + `yfinance` which are pre-installed in this environment.
     """)
 
 # ── Disclaimer ────────────────────────────────────────────────────────────────
