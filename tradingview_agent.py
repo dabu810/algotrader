@@ -148,7 +148,11 @@ TOOLS = [
 
 # ── Tool Executor ─────────────────────────────────────────────────────────────
 
-def make_executor(mcp: TradingViewMCPClient, default_exchange: str = "NSE"):
+def make_executor(
+    mcp: TradingViewMCPClient,
+    default_exchange: str = "NSE",
+    on_tool_result: Optional[Callable] = None,
+):
     """Return a tool-execute function bound to the given MCP client."""
 
     def execute(tc: ToolCall) -> dict:
@@ -156,31 +160,57 @@ def make_executor(mcp: TradingViewMCPClient, default_exchange: str = "NSE"):
         symbol   = i.get("symbol", "")
         exchange = i.get("exchange", default_exchange)
         tf       = i.get("timeframe", "1h")
+        result: dict = {}
 
         if tc.name == "get_indicators":
-            return mcp.get_indicators(symbol, exchange, tf)
+            result = mcp.get_indicators(symbol, exchange, tf)
+            if on_tool_result and "error" not in result:
+                inds = result.get("indicators", {})
+                close = inds.get("close", "—")
+                rsi   = inds.get("RSI") or inds.get("RSI[1]", "—")
+                n     = len(inds)
+                on_tool_result(tc.name, f"{n} indicators | Close: {close} | RSI: {rsi:.1f}" if isinstance(rsi, float) else f"{n} indicators | Close: {close}")
 
-        if tc.name == "get_historical_data":
-            return mcp.get_historical_data(symbol, exchange, tf, int(i.get("bars", 200)))
+        elif tc.name == "get_historical_data":
+            result = mcp.get_historical_data(symbol, exchange, tf, int(i.get("bars", 200)))
+            if on_tool_result and "error" not in result:
+                bars = len(result.get("data", []))
+                on_tool_result(tc.name, f"{bars} OHLCV bars fetched")
 
-        if tc.name == "analyze_patterns_and_sr":
-            return _analyze_patterns(
+        elif tc.name == "analyze_patterns_and_sr":
+            result = _analyze_patterns(
                 i.get("ohlcv_data", []),
                 int(i.get("lookback_candles", 100)),
             )
+            if on_tool_result and "error" not in result:
+                patterns  = result.get("patterns", [])
+                supports  = result.get("support_levels", [])
+                resistances = result.get("resistance_levels", [])
+                trend     = result.get("trend", "—")
+                on_tool_result(tc.name, f"{len(patterns)} pattern(s) | Trend: {trend} | S: {supports[:2]} | R: {resistances[:2]}")
 
-        if tc.name == "get_multi_timeframe_analysis":
-            return _multi_timeframe(mcp, symbol, exchange)
+        elif tc.name == "get_multi_timeframe_analysis":
+            result = _multi_timeframe(mcp, symbol, exchange)
+            if on_tool_result and "error" not in result:
+                tfs = list(result.get("timeframes", {}).keys())
+                on_tool_result(tc.name, f"Timeframes: {', '.join(tfs)}")
 
-        if tc.name == "calculate_direction_probability":
-            return _direction_probability(
+        elif tc.name == "calculate_direction_probability":
+            result = _direction_probability(
                 i.get("indicators", {}),
                 i.get("mtf_data", {}),
                 i.get("patterns", {}),
                 i.get("primary_tf", "1h"),
             )
+            if on_tool_result and "error" not in result:
+                direction  = result.get("direction", "—")
+                confidence = result.get("confidence_pct", "—")
+                price      = result.get("current_price", "—")
+                on_tool_result(tc.name, f"→ {direction} | Confidence: {confidence}% | Price: {price}")
+        else:
+            result = {"error": f"Unknown tool: {tc.name}"}
 
-        return {"error": f"Unknown tool: {tc.name}"}
+        return result
 
     return execute
 
@@ -582,14 +612,18 @@ def analyze_symbol(
 
     def on_tool_call(tc: ToolCall):
         if verbose:
-            args_str = ", ".join(f"{k}={v}" for k, v in tc.input.items())
-            console.print(f"[dim]  → {tc.name}({args_str})[/dim]")
+            args_str = ", ".join(f"{k}={v}" for k, v in tc.input.items() if k != "ohlcv_data")
+            console.print(f"[dim cyan]  ⟳ {tc.name}({args_str})[/dim cyan]")
+
+    def on_tool_result(name: str, summary: str):
+        if verbose:
+            console.print(f"[dim green]  ✓ {name}: {summary}[/dim green]")
 
     result = provider.run(
         system=SYSTEM_PROMPT,
         user_message=user_message,
         tools=TOOLS,
-        execute_fn=make_executor(mcp, default_exchange=exchange),
+        execute_fn=make_executor(mcp, default_exchange=exchange, on_tool_result=on_tool_result),
         on_tool_call=on_tool_call,
     )
 
@@ -601,6 +635,43 @@ def analyze_symbol(
         ))
 
     return result
+
+
+def analyze_symbol_streaming(
+    symbol:        str,
+    timeframe:     str = "1h",
+    exchange:      str = "NSE",
+    provider_name: Optional[str] = None,
+    model:         Optional[str] = None,
+    mcp_server:    str = "mcp-tradingview",
+    on_tool_call:  Optional[Callable] = None,
+    on_tool_result: Optional[Callable] = None,
+):
+    """
+    Streaming variant of analyze_symbol.
+    Yields text chunks as the final analysis is generated.
+    Tool calls execute normally (blocking); only the final text is streamed.
+    """
+    mcp      = TradingViewMCPClient(server_command=mcp_server)
+    provider = get_provider(provider_name=provider_name, model=model, max_tokens=8192)
+
+    user_message = (
+        f"Perform a comprehensive technical analysis for {symbol} on {exchange} "
+        f"using the {timeframe} timeframe as the primary chart. "
+        f"Use all available tools to collect indicators, historical OHLCV data, "
+        f"candlestick patterns, multi-timeframe confluence, and compute the "
+        f"directional probability. State clearly whether the price is likely to "
+        f"move BULLISH, BEARISH, or stay NEUTRAL, with your confidence level and "
+        f"the specific levels that confirm or invalidate the bias."
+    )
+
+    yield from provider.run_streaming(
+        system=SYSTEM_PROMPT,
+        user_message=user_message,
+        tools=TOOLS,
+        execute_fn=make_executor(mcp, default_exchange=exchange, on_tool_result=on_tool_result),
+        on_tool_call=on_tool_call,
+    )
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

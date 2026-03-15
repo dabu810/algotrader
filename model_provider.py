@@ -298,6 +298,21 @@ class BaseProvider(ABC):
 
         return response.text
 
+    def run_streaming(
+        self,
+        system: str,
+        user_message: str,
+        tools: list[dict],
+        execute_fn: Callable[[ToolCall], dict],
+        on_tool_call: Optional[Callable[[ToolCall], None]] = None,
+    ):
+        """
+        Streaming variant: tool calls run as normal, final text is yielded
+        as chunks for progressive display. Default implementation yields
+        the full text in one chunk — override per provider for real streaming.
+        """
+        yield self.run(system, user_message, tools, execute_fn, on_tool_call)
+
 
 # ── Anthropic provider ─────────────────────────────────────────────────────────
 
@@ -362,6 +377,42 @@ class AnthropicProvider(BaseProvider):
 
         # Exceeded max continuations — return whatever text we have
         return LLMResponse(text="[Analysis exceeded max iterations]", done=True)
+
+    def run_streaming(self, system, user_message, tools, execute_fn, on_tool_call=None):
+        """
+        Real streaming: run tool loop non-streaming, then re-issue the
+        final synthesis call with streaming so text appears as it's generated.
+        """
+        self._start(system, tools)
+        response = self._send_user(user_message)
+
+        while not response.done:
+            results = []
+            for tc in response.tool_calls:
+                if on_tool_call:
+                    on_tool_call(tc)
+                result = execute_fn(tc)
+                results.append({
+                    "tool_use_id": tc.id,
+                    "name":        tc.name,
+                    "content":     json.dumps(result, ensure_ascii=False),
+                })
+            response = self._send_tool_results(results)
+
+        # All tools executed. self._msgs[-1] is the non-streamed final response.
+        # Pop it and redo the final call with streaming.
+        self._msgs.pop()
+
+        with self._client.messages.stream(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            thinking={"type": "adaptive"},
+            system=self._system,
+            tools=self._tools,
+            messages=self._msgs,
+        ) as stream:
+            for chunk in stream.text_stream:
+                yield chunk
 
 
 # ── OpenAI provider ────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import streamlit as st
 from dotenv import load_dotenv
 load_dotenv()
 
-from model_provider import SUPPORTED_PROVIDERS, PROVIDER_MODELS, provider_info, ToolCall
+from model_provider import SUPPORTED_PROVIDERS, PROVIDER_MODELS, provider_info
 
 st.set_page_config(page_title="TradingView TA Agent", page_icon="📡", layout="wide")
 
@@ -123,43 +123,64 @@ if run:
     progress_ph = st.empty()
     tool_log: list[str] = []
 
-    def on_tool_call(tc: ToolCall):
-        label = TOOL_LABELS.get(tc.name, f"🔧 {tc.name}")
-        args  = ", ".join(f"{k}={v}" for k, v in tc.input.items() if k != "ohlcv_data")
-        entry = f"✅ {label}" + (f" <span style='color:#555'>({args})</span>" if args else "")
-        tool_log.append(entry)
-        progress_ph.markdown(
-            '<div class="tool-log">' + "<br>".join(tool_log) + "</div>",
-            unsafe_allow_html=True,
-        )
+    result_ph = st.empty()
+    accumulated = ""
 
-    with st.spinner(f"Analysing {symbol} on {timeframe}… ~45-90 seconds"):
-        try:
-            from tradingview_agent import analyze_symbol
-            result = analyze_symbol(
-                symbol=symbol,
-                timeframe=timeframe,
-                exchange=exchange,
-                provider_name=provider,
-                model=model_override,
-                mcp_server=mcp_cmd,
-                verbose=False,
+    try:
+        from tradingview_agent import analyze_symbol_streaming
+
+        def _on_tool_call(tc):
+            label = TOOL_LABELS.get(tc.name, f"🔧 {tc.name}")
+            args  = ", ".join(f"{k}={v}" for k, v in tc.input.items() if k != "ohlcv_data")
+            entry = f"⏳ {label}" + (f" <span style='color:#555'>({args})</span>" if args else "")
+            tool_log.append(entry)
+            progress_ph.markdown(
+                '<div class="tool-log">' + "<br>".join(tool_log) + "</div>",
+                unsafe_allow_html=True,
             )
-            st.session_state["tv_result"] = {
-                "text": result, "symbol": symbol, "tf": timeframe
-            }
-        except EnvironmentError as e:
-            st.error(f"Configuration error: {e}")
+
+        def _on_tool_result(name, summary):
+            label = TOOL_LABELS.get(name, f"🔧 {name}")
+            # Replace last ⏳ entry with ✅ + summary
+            for i in range(len(tool_log) - 1, -1, -1):
+                if label.split(" ", 1)[-1] in tool_log[i]:
+                    tool_log[i] = f"✅ {label} <span style='color:#4caf50;font-size:0.78rem'> → {summary}</span>"
+                    break
+            progress_ph.markdown(
+                '<div class="tool-log">' + "<br>".join(tool_log) + "</div>",
+                unsafe_allow_html=True,
+            )
+
+        for chunk in analyze_symbol_streaming(
+            symbol=symbol,
+            timeframe=timeframe,
+            exchange=exchange,
+            provider_name=provider,
+            model=model_override,
+            mcp_server=mcp_cmd,
+            on_tool_call=_on_tool_call,
+            on_tool_result=_on_tool_result,
+        ):
+            accumulated += chunk
+            result_ph.markdown(accumulated + "▌")
+
+        result_ph.markdown(accumulated)
+        st.session_state["tv_result"] = {
+            "text": accumulated, "symbol": symbol, "tf": timeframe
+        }
+
+    except EnvironmentError as e:
+        st.error(f"Configuration error: {e}")
+        st.stop()
+    except Exception as e:
+        msg = str(e)
+        if "401" in msg or "authentication_error" in msg or "invalid x-api-key" in msg or "invalid_api_key" in msg:
+            provider_key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
+                            "gemini": "GOOGLE_API_KEY", "mistral": "MISTRAL_API_KEY"}.get(provider, "API key")
+            st.error(f"Invalid API key for **{provider}**. Check `{provider_key}` in your `.env` file.")
             st.stop()
-        except Exception as e:
-            msg = str(e)
-            if "401" in msg or "authentication_error" in msg or "invalid x-api-key" in msg or "invalid_api_key" in msg:
-                provider_key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
-                                "gemini": "GOOGLE_API_KEY", "mistral": "MISTRAL_API_KEY"}.get(provider, "API key")
-                st.error(f"Invalid API key for **{provider}**. Check `{provider_key}` in your `.env` file.")
-                st.stop()
-            st.error(f"Agent error: {e}")
-            st.stop()
+        st.error(f"Agent error: {e}")
+        st.stop()
 
     progress_ph.empty()
 

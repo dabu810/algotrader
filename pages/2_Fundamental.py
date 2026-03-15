@@ -114,37 +114,49 @@ if run:
 
         progress_fn = _make_progress(symbol, progress_ph, tool_log)
 
-        with st.spinner(f"Researching {symbol}… ~60-90 seconds"):
-            try:
-                from fundamental_agent import analyze_stock
+        result_ph = st.empty()
+        accumulated = ""
 
-                # Monkey-patch the console so tool calls go to our progress_fn
-                import fundamental_agent as _fa
-                _orig_print = _fa.console.print
+        try:
+            from fundamental_agent import analyze_stock_streaming
 
-                def _patched_print(msg, *a, **kw):
-                    if "→" in str(msg) or "web_" in str(msg):
-                        progress_fn(str(msg).replace("[dim]", "").replace("[/dim]", "").strip())
-                    _orig_print(msg, *a, **kw)
+            def _on_tool_call(tc):
+                icons = {"web_search": "🔍", "web_fetch": "🌐", "score_fundamentals": "📊"}
+                icon  = icons.get(tc.name, "🔧")
+                detail = tc.input.get("query") or tc.input.get("url") or tc.input.get("stock_symbol", "")
+                entry  = f"{icon} <span style='color:#8b949e'>{str(detail)[:70]}</span>"
+                tool_log.append(entry)
+                progress_ph.markdown(
+                    '<div class="tool-log">' + "<br>".join(tool_log) + "</div>",
+                    unsafe_allow_html=True,
+                )
 
-                _fa.console.print = _patched_print
-                result = analyze_stock(symbol, verbose=False)
-                _fa.console.print = _orig_print
+            with st.spinner(f"Researching {symbol}…"):
+                for chunk in analyze_stock_streaming(
+                    stock_symbol=symbol,
+                    provider_name=provider,
+                    model=model_override,
+                    on_tool_call=_on_tool_call,
+                ):
+                    accumulated += chunk
+                    result_ph.markdown(accumulated + "▌")
 
-                results[symbol] = result or f"No data returned for {symbol}."
-            except EnvironmentError as e:
-                st.error(f"Configuration error: {e}")
+            result_ph.markdown(accumulated)
+            results[symbol] = accumulated or f"No data returned for {symbol}."
+
+        except EnvironmentError as e:
+            st.error(f"Configuration error: {e}")
+            st.stop()
+        except Exception as e:
+            msg = str(e)
+            if "401" in msg or "authentication_error" in msg or "invalid x-api-key" in msg or "invalid_api_key" in msg:
+                provider_key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
+                                "gemini": "GOOGLE_API_KEY", "mistral": "MISTRAL_API_KEY"}.get(provider, "API key")
+                progress_ph.empty()
+                st.error(f"Invalid API key for **{provider}**. Open your `.env` file and set a valid `{provider_key}`.")
+                st.info("Get your Anthropic API key at https://console.anthropic.com → API Keys")
                 st.stop()
-            except Exception as e:
-                msg = str(e)
-                if "401" in msg or "authentication_error" in msg or "invalid x-api-key" in msg or "invalid_api_key" in msg:
-                    provider_key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
-                                    "gemini": "GOOGLE_API_KEY", "mistral": "MISTRAL_API_KEY"}.get(provider, "API key")
-                    progress_ph.empty()
-                    st.error(f"Invalid API key for **{provider}**. Open your `.env` file and set a valid `{provider_key}`.")
-                    st.info("Get your Anthropic API key at https://console.anthropic.com → API Keys")
-                    st.stop()
-                results[symbol] = f"⚠️ Error analysing {symbol}: {e}"
+            results[symbol] = f"⚠️ Error analysing {symbol}: {e}"
 
         progress_ph.empty()
 

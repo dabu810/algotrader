@@ -285,6 +285,36 @@ def analyze_stock(
     return result.strip()
 
 
+def analyze_stock_streaming(
+    stock_symbol: str,
+    provider_name: str | None = None,
+    model: str | None = None,
+    on_tool_call=None,
+):
+    """
+    Streaming variant: yields text chunks as the final analysis is generated.
+    Tool calls execute normally; only the final synthesis text is streamed.
+    """
+    provider = get_provider(provider_name=provider_name, model=model, max_tokens=8192)
+
+    user_message = (
+        f"Perform a comprehensive fundamental analysis of {stock_symbol} (Indian stock, NSE/BSE).\n\n"
+        f"Steps:\n"
+        f'1. Search: "{stock_symbol} NSE quarterly results FY25 annual report financials"\n'
+        f"2. Fetch: https://www.screener.in/company/{stock_symbol}/\n"
+        f'3. Search: "{stock_symbol} latest news management commentary 2024 2025"\n'
+        f'4. Search: "{stock_symbol} sector PE ratio peer comparison"\n'
+        f"5. Call score_fundamentals with all metrics found\n"
+        f"6. Write the analysis in the exact WhatsApp format from your instructions\n\n"
+        f"Do NOT include any buy/sell/hold opinion or price targets."
+    )
+
+    execute_fn = _make_executor(verbose=False)
+    yield from provider.run_streaming(
+        SYSTEM_PROMPT, user_message, TOOLS, execute_fn, on_tool_call=on_tool_call
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Display helpers (CLI only)
 # ─────────────────────────────────────────────────────────────────────────────
